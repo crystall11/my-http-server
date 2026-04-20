@@ -1,0 +1,17 @@
+```yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt install -y cmake ninja-build
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: cd build && ctest --output-on-failure
+```
