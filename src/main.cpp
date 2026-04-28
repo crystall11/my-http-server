@@ -1,10 +1,10 @@
-#include <iostream>
+// src/main.cpp
+#include <stdio.h>
 
-int main(int argc, char* argv[]) {
-    int port = 8080;
-    if (argc > 1) port = std::stoi(argv[1]);
-    
-    std::cout << "[server] starting on port " << port << std::endl;
-    // TODO: initialize epoll server
+// 声明 server.cpp 里的函数
+void run_server(int port);
+
+int main() {
+    run_server(8080);
     return 0;
 }
