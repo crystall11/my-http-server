@@ -1,4 +1,5 @@
 #include "http_parser.h"
+#include "http_response.h"
 #include <asm-generic/socket.h>
 #include <cerrno>
 #include <fcntl.h>
@@ -75,6 +76,7 @@ void run_server(int port) {
         }
       } else {
         Connection &conn = connections[fd];
+        //读数据到conn.read_buf
         while (1) {
           char buf[1024];
           int bytes = read(fd, buf, sizeof(buf));
@@ -88,29 +90,25 @@ void run_server(int port) {
             close(fd);
             break;
           }
-          conn.read_buf.append(buf);
+          conn.read_buf.append(buf,bytes);
+        }
+          
+        // 判断是否接收完毕
+        if (conn.read_buf.find("\r\n\r\n") == std::string::npos)
+          continue;
+        //解析请求
+        bool done = conn.parser.parse(conn.read_buf);
+        if (done) {
+          auto &req = conn.parser.request;
+          printf("method: %s\n", req.method.c_str());
+          printf("path: %s\n", req.path.c_str());
 
-          if (conn.read_buf.find("\r\n") == std::string::npos)
-            continue;
-          // 判断是否接收完毕
-          bool done = conn.parser.parse(conn.read_buf);
-          if (done) {
-            auto &req = conn.parser.request;
-            printf("method: %s\n", req.method.c_str());
-            printf("path: %s\n", req.path.c_str());
-
-            // 响应
-            std::string response = "HTTP/1.1 200 OK\r\n"
-                                   "Content-Type: text/plain\r\n"
-                                   "Content-Length: 13\r\n"
-                                   "Connection: close\r\n"
-                                   "\r\n"
-                                   "Hello, World!";
-            write(fd, response.c_str(), response.size());
-            epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-            close(fd);
-            connections.erase(fd);
-          }
+          // 响应
+          std::string response = serve_file(req.path);
+          write(fd, response.c_str(), response.size());
+          epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+          close(fd);
+          connections.erase(fd);
         }
       }
     }
