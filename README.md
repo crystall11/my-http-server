@@ -1,16 +1,18 @@
 # my-http-server
 
-轻量级 HTTP/1.1 服务器，基于 epoll ET 模式 + 线程池，支持 AI API 转发。
+轻量级 HTTP/1.1 服务器，基于 epoll ET 模式，用 C++ 从零实现。
 
-## 特性
-- [ ] epoll ET 模式非阻塞 IO
-- [ ] 线程池处理并发请求
-- [ ] HTTP/1.1 GET / POST 解析
-- [ ] 静态文件服务
+## 已实现功能
+
+- [x] epoll ET 模式非阻塞 IO
+- [x] 多客户端并发连接
+- [x] HTTP/1.1 GET 请求解析（状态机）
+- [x] 静态文件服务（html/css/js/png）
+- [ ] 线程池
+- [ ] POST 请求
 - [ ] Keep-Alive 长连接
-- [ ] AI API 反向代理
 
-## 构建
+## 构建 & 运行
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
@@ -18,6 +20,18 @@ cmake --build build --parallel
 ./build/server 8080
 ```
 
-## 设计说明
+## 测试
 
-（后续补充：架构图、模块说明）
+```bash
+# 正常请求
+curl -i http://127.0.0.1:8080/index.html
+
+# 404
+curl -i http://127.0.0.1:8080/notexist
+```
+
+## 技术设计
+
+- 网络层：epoll ET + 非阻塞 fd，每个连接维护独立读缓冲区处理粘包
+- 解析层：状态机逐行解析 HTTP 请求头（REQUEST_LINE → HEADERS → DONE）
+- 响应层：根据文件扩展名自动设置 Content-Type
