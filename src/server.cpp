@@ -1,5 +1,6 @@
 #include "http_parser.h"
 #include "http_response.h"
+#include "thread_pool.h"
 #include <asm-generic/socket.h>
 #include <cerrno>
 #include <fcntl.h>
@@ -27,6 +28,7 @@ void set_nonblocking(int fd) {
   fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 void run_server(int port) {
+  ThreadPool threadpool(5);
   int server_fd = socket(AF_INET, SOCK_STREAM, 0); // 创建 socket
   int opt = 1;
   setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
@@ -100,15 +102,17 @@ void run_server(int port) {
         bool done = conn.parser.parse(conn.read_buf);
         if (done) {
           auto &req = conn.parser.request;
-          printf("method: %s\n", req.method.c_str());
-          printf("path: %s\n", req.path.c_str());
-
-          // 响应
-          std::string response = serve_file(req.path);
-          write(fd, response.c_str(), response.size());
+          std::string path=req.path;
+          //主线程移除事件
           epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-          close(fd);
           connections.erase(fd);
+          // 用线程池读文件并响应
+          threadpool.submit([path, fd] {
+            std::string response=serve_file(path);
+            write(fd, response.c_str(),response.size());
+            close(fd);
+          });
+          
         }
       }
     }
