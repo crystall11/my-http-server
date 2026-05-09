@@ -78,7 +78,7 @@ void run_server(int port) {
         }
       } else {
         Connection &conn = connections[fd];
-        //读数据到conn.read_buf
+        // 读数据到conn.read_buf
         while (1) {
           char buf[1024];
           int bytes = read(fd, buf, sizeof(buf));
@@ -92,27 +92,41 @@ void run_server(int port) {
             close(fd);
             break;
           }
-          conn.read_buf.append(buf,bytes);
+          conn.read_buf.append(buf, bytes);
         }
-          
+
         // 判断是否接收完毕
         if (conn.read_buf.find("\r\n\r\n") == std::string::npos)
           continue;
-        //解析请求
+        // 解析请求
         bool done = conn.parser.parse(conn.read_buf);
+
         if (done) {
           auto &req = conn.parser.request;
-          std::string path=req.path;
-          //主线程移除事件
-          epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-          connections.erase(fd);
-          // 用线程池读文件并响应
-          threadpool.submit([path, fd] {
-            std::string response=serve_file(path);
-            write(fd, response.c_str(),response.size());
-            close(fd);
-          });
-          
+          // 是否keep-alive
+          bool keep_alive = true;
+          auto it = req.headers.find("Connection");
+          if (it != req.headers.end() && it->second == "close") {
+            keep_alive = false;
+          }
+          std::string path = req.path;
+          if (keep_alive) {
+            conn.read_buf.clear();
+            conn.parser = HttpParser();
+            threadpool.submit([path, fd, keep_alive] {
+              std::string response = serve_file(path, keep_alive);
+              write(fd, response.c_str(), response.size());
+            });
+          } else { // 主线程移除事件
+            epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+            connections.erase(fd);
+            // 用线程池读文件并响应
+            threadpool.submit([path, fd, keep_alive] {
+              std::string response = serve_file(path, keep_alive);
+              write(fd, response.c_str(), response.size());
+              close(fd);
+            });
+          }
         }
       }
     }

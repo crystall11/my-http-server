@@ -5,6 +5,6 @@
 void run_server(int port);
 
 int main() {
-    run_server(8080);
-    return 0;
+  run_server(8080);
+  return 0;
 }
