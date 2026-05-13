@@ -3,6 +3,7 @@
 #include "thread_pool.h"
 #include <asm-generic/socket.h>
 #include <cerrno>
+#include <chrono>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -18,6 +19,7 @@ struct Connection {
   int fd;
   std::string read_buf;
   HttpParser parser;
+  std::chrono::steady_clock::time_point last_active; // 时间戳
 };
 
 std::unordered_map<int, Connection> connections;
@@ -53,7 +55,29 @@ void run_server(int port) {
   struct epoll_event events[MAX_EVENTS];
 
   while (1) {
-    int n = epoll_wait(epfd, events, MAX_EVENTS, -1);
+    int n = epoll_wait(epfd, events, MAX_EVENTS, 5000);
+
+    // 超时时扫描并关闭空闲连接
+    if (n == 0) {
+      auto now = std::chrono::steady_clock::now();
+      std::vector<int> to_close;
+
+      for (auto &[fd, conn] : connections) {
+        auto idle = std::chrono::duration_cast<std::chrono::seconds>(
+                        now - conn.last_active)
+                        .count();
+        if (idle > 60) { // 超过60s没有活动
+          to_close.push_back(fd);
+        }
+      }
+
+      for (int fd : to_close) {
+        printf("timeout, closing fd=%d\n", fd);
+        epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+        close(fd);
+        connections.erase(fd);
+      }
+    }
 
     for (int i = 0; i < n; i++) {
       int fd = events[i].data.fd;
@@ -70,6 +94,7 @@ void run_server(int port) {
           set_nonblocking(client_fd);
 
           connections[client_fd] = Connection{client_fd};
+          connections[client_fd].last_active = std::chrono::steady_clock::now();
 
           ev.events = EPOLLIN | EPOLLET;
           ev.data.fd = client_fd;
@@ -85,14 +110,17 @@ void run_server(int port) {
           if (bytes == -1 && errno == EAGAIN) {
             break;
           }
+
           if (bytes <= 0) {
             // 客户端断开
             printf("client fd=%d disconnected.\n", fd);
             epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
             close(fd);
+            connections.erase(fd);
             break;
           }
           conn.read_buf.append(buf, bytes);
+          conn.last_active = std::chrono::steady_clock::now(); // 更新时间戳
         }
 
         // 判断是否接收完毕
