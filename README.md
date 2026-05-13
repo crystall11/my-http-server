@@ -4,13 +4,14 @@
 
 ## 已实现功能
 
-- [x] epoll ET 模式非阻塞 IO
-- [x] 多客户端并发连接
-- [x] HTTP/1.1 GET 请求解析（状态机）
-- [x] 静态文件服务（html/css/js/png）
-- [ ] 线程池
-- [ ] POST 请求
-- [ ] Keep-Alive 长连接
+✅ epoll ET 非阻塞 IO
+✅ HTTP/1.1 GET 解析（状态机）
+✅ 静态文件服务
+✅ 线程池
+✅ Keep-Alive
+✅ 超时断开
+⬜ 压测 + README 数据
+⬜ POST 请求
 
 ## 构建 & 运行
 
